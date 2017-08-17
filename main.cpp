@@ -7,7 +7,7 @@
 bool receiveFile(ssh_session session, std::string targetFile, std::string receivingFile){
 
   ssh_scp scp;
-  int rc, i=0;
+  int rc, copied=0, i=0;
   size_t bufsize;
   void *buffer;
   char buffer_read[16384];
@@ -48,15 +48,16 @@ bool receiveFile(ssh_session session, std::string targetFile, std::string receiv
   do{
     rc = ssh_scp_read(scp, buffer_read, 16384);
     if (rc == SSH_ERROR){
-      std::cout << "Data  retrieval error: " << ssh_get_error(session) << std::endl;
+      std::cout << "rc = " << rc <<  "Data  retrieval error: " << ssh_get_error(session) << std::endl;
       free(buffer);
       return false;
     }
 
-    std::cout << "Copied " << rc << std::endl;
-    memcpy((char *) buffer + i*16384, buffer_read, rc);
-    i++;
-    if(rc < 16384)
+    memcpy((char *) buffer + copied, buffer_read, rc);
+    copied += 16384;
+    std::cout << "Copied " << copied << std::endl;
+
+    if(copied >= bufsize)
       break;
   } while(true);
   
@@ -82,10 +83,15 @@ bool receiveFile(ssh_session session, std::string targetFile, std::string receiv
 }
 
 
-int main(){
+int main(int argc, char **argv){
   ssh_session my_ssh_session;
   int rc;
   int port = 22;
+  
+  if(argc < 3){
+    std::cout << "Usage : ./output distantFile receivingFile" << std::endl;
+    return 0;
+  }
 
   my_ssh_session = ssh_new();
 
@@ -115,7 +121,7 @@ int main(){
   }
   std::cout << "Authenticated" << std::endl;
   
-  if (ReceiveFile(my_ssh_session, std::string("/tmp/distant.txt"), std::string("/tmp/local.txt")))
+  if (receiveFile(my_ssh_session, std::string(argv[1]), std::string(argv[2])))
     std::cout << "Received well" << std::endl;
   else
     std::cout << "Not received well" << std::endl;
