@@ -4,13 +4,15 @@
 #include <fstream>
 #include <string.h>
 
+#define BUF_SIZE 16384
+
 bool receiveFile(ssh_session session, std::string targetFile, std::string receivingFile){
 
   ssh_scp scp;
   int rc, copied=0, i=0;
   size_t bufsize;
-  void *buffer;
-  char buffer_read[16384];
+  char *buffer;
+  char buffer_read[BUF_SIZE];
 
   scp = ssh_scp_new(session, SSH_SCP_READ, targetFile.c_str());
   if (scp == NULL){
@@ -28,10 +30,10 @@ bool receiveFile(ssh_session session, std::string targetFile, std::string receiv
     std::cout << "File information error: " << ssh_get_error(session) << std::endl;
     return false;
   }
-  
+
   bufsize = ssh_scp_request_get_size(scp);
   std::cout << "Received bufsize = " << bufsize << std::endl;
-  buffer = malloc(bufsize);
+  buffer = new char[bufsize];
   if (buffer == NULL){
     std::cout << "Memory allocation error" << std::endl;
     return false;
@@ -39,39 +41,37 @@ bool receiveFile(ssh_session session, std::string targetFile, std::string receiv
 
   if (ssh_scp_accept_request(scp) == SSH_ERROR){
     std::cout << "Accept request error" <<std::endl;
-    free(buffer);
+    delete[] buffer;
     return false;
   }
 
   std::cout << "Copying file to buffer ..." << std::endl;
-  
+
   do{
-    rc = ssh_scp_read(scp, buffer_read, 16384);
+    rc = ssh_scp_read(scp, buffer_read, BUF_SIZE);
     if (rc == SSH_ERROR){
       std::cout << "rc = " << rc <<  "Data  retrieval error: " << ssh_get_error(session) << std::endl;
-      free(buffer);
+      delete[] buffer;
       return false;
     }
 
-    memcpy((char *) buffer + copied, buffer_read, rc);
-    copied += 16384;
+    memcpy(&buffer[copied], buffer_read, rc);
+    copied += rc;
     std::cout << "Copied " << copied << std::endl;
 
-    if(copied >= bufsize)
-      break;
-  } while(true);
-  
+  } while(copied < bufsize);
+
   std::cout << ".. Done" << std::endl;
   std::ofstream outputFile(receivingFile.c_str(), std::ofstream::binary);
   if (outputFile == NULL){
     std::cout << "File error" << std::endl;
-    free(buffer);
+    delete[] buffer;
     return false;
   }
   std::cout << "Copying buffer to file ..." << std::endl;
-  outputFile.write((char*) buffer, bufsize);
+  outputFile.write(buffer, bufsize);
   std::cout << ".. Done" << std::endl;
-  free(buffer);
+  delete[] buffer;
 
   std::cout << "Freed buffer" << std::endl;
   outputFile.close();
@@ -87,7 +87,7 @@ int main(int argc, char **argv){
   ssh_session my_ssh_session;
   int rc;
   int port = 22;
-  
+
   if(argc < 3){
     std::cout << "Usage : ./output distantFile receivingFile" << std::endl;
     return 0;
@@ -120,12 +120,12 @@ int main(int argc, char **argv){
     exit(-1);
   }
   std::cout << "Authenticated" << std::endl;
-  
+
   if (receiveFile(my_ssh_session, std::string(argv[1]), std::string(argv[2])))
     std::cout << "Received well" << std::endl;
   else
     std::cout << "Not received well" << std::endl;
-  
+
   ssh_free(my_ssh_session);
   return 0;
 }
